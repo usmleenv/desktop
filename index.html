@@ -1770,6 +1770,30 @@
             transform: translateY(0);
         }
 
+        .stopwatch-option {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: #5f6368;
+        }
+
+        .stopwatch-option input[type="checkbox"] {
+            cursor: pointer;
+            width: 16px;
+            height: 16px;
+            accent-color: var(--primary);
+        }
+
+        .stopwatch-option label {
+            cursor: pointer;
+            user-select: none;
+            line-height: 1.4;
+        }
+
         /* Utility Modals */
         .utility-modal {
             display: none;
@@ -3085,6 +3109,7 @@
                 const data = getData(qId);
                 const card = document.createElement('div');
                 card.className = 'question-card';
+                card.setAttribute('data-question-id', qId);
 
                 if (data.isCorrect) card.classList.add('correct');
                 else if (data.isIncorrect) card.classList.add('incorrect');
@@ -3104,6 +3129,34 @@
 
             body.innerHTML = '';
             body.appendChild(grid);
+        }
+
+        function updateSingleQuestionCard(questionId) {
+            // Find the card for this specific question
+            const card = document.querySelector(`.question-card[data-question-id="${questionId}"]`);
+            if (!card) return;
+
+            const data = getData(questionId);
+
+            // Remove all status classes
+            card.classList.remove('correct', 'incorrect', 'unattempted');
+
+            // Add new status class
+            if (data.isCorrect) card.classList.add('correct');
+            else if (data.isIncorrect) card.classList.add('incorrect');
+            else card.classList.add('unattempted');
+
+            // Update card content
+            card.innerHTML = `
+                ${data.isFlagged ? '<div class="flag-icon">🚩</div>' : ''}
+                <div class="question-number">${questionId}</div>
+                <div class="question-status">
+                    ${data.isCorrect ? 'Correct' : data.isIncorrect ? 'Incorrect' : 'New'}
+                </div>
+            `;
+
+            // Re-attach click handler
+            card.onclick = () => openQuestion(questionId);
         }
 
         // Open Question in Fullscreen (Normal Mode)
@@ -3163,6 +3216,15 @@
 
             // Reset the last checked choice for the polling function
             lastCheckedChoice = data.selectedAnswer || '';
+
+            // Reset the last checked result for validation polling
+            // Set to empty string so next validation will be detected
+            lastCheckedResult = '';
+
+            // Resume timer if it was auto-paused
+            if (typeof resumeTimerOnQuestionChange === 'function') {
+                resumeTimerOnQuestionChange();
+            }
         }
 
         function closeQuestion() {
@@ -3399,6 +3461,60 @@
 
         // Check every 500ms for changes
         setInterval(checkIframeChoice, 500);
+
+        // Check for answer validation from iframe
+        let lastCheckedResult = '';
+
+        function checkAnswerValidation() {
+            if (!currentQuestionId) return;
+
+            const resultKey = 'result_q' + currentQuestionId;
+            const currentResult = localStorage.getItem(resultKey) || '';
+
+            if (currentResult && currentResult !== lastCheckedResult) {
+                lastCheckedResult = currentResult;
+
+                // Auto-mark correct or incorrect
+                const data = getData(currentQuestionId);
+
+                if (currentResult === 'correct') {
+                    data.isCorrect = true;
+                    data.isIncorrect = false;
+                } else if (currentResult === 'incorrect') {
+                    data.isCorrect = false;
+                    data.isIncorrect = true;
+                }
+
+                saveData(currentQuestionId, data);
+
+                // Update button UI
+                updateActionButtonsState();
+
+                // Update stats display
+                updateStats();
+
+                // Update sidebar/grid based on mode
+                if (isTestMode) {
+                    // Update test mode sidebar item
+                    updateSingleTestQuestionItem(currentQuestionId);
+                } else {
+                    // Check if we're viewing a question (sidebar shows topic questions)
+                    const container = document.getElementById('container');
+                    if (container && container.classList.contains('viewing-question')) {
+                        // Update topic sidebar item
+                        updateSingleTopicSidebarItem(currentQuestionId);
+                    } else {
+                        // Update normal mode question card in grid
+                        updateSingleQuestionCard(currentQuestionId);
+                    }
+                }
+
+                console.log(`Auto-marked as ${currentResult} for question ${currentQuestionId}`);
+            }
+        }
+
+        // Check every 500ms for answer validation
+        setInterval(checkAnswerValidation, 500);
 
         function toggleFlag() {
             if (!currentQuestionId) return;
@@ -3664,7 +3780,8 @@
                         return `
                             <div class="test-question-item ${index === currentTestIndex ? 'active' : ''}"
                                  onclick="openTestQuestion(${index})"
-                                 data-index="${index}">
+                                 data-index="${index}"
+                                 data-question-id="${qId}">
                                 <div class="test-question-number">Q ${qId}</div>
                                 <div class="test-question-status">${statusIcons.join(' ')}</div>
                             </div>
@@ -3672,6 +3789,24 @@
                     }).join('')}
                 </div>
             `;
+        }
+
+        function updateSingleTestQuestionItem(questionId) {
+            // Find the test question item for this specific question
+            const item = document.querySelector(`.test-question-item[data-question-id="${questionId}"]`);
+            if (!item) return;
+
+            const data = getData(questionId);
+            const statusIcons = [];
+            if (data.isFlagged) statusIcons.push('🚩');
+            if (data.isCorrect) statusIcons.push('✓');
+            if (data.isIncorrect) statusIcons.push('✗');
+
+            // Update only the status part
+            const statusElement = item.querySelector('.test-question-status');
+            if (statusElement) {
+                statusElement.textContent = statusIcons.join(' ');
+            }
         }
 
         function openTestQuestion(index) {
@@ -3742,6 +3877,15 @@
 
             // Reset the last checked choice for the polling function
             lastCheckedChoice = data.selectedAnswer || '';
+
+            // Reset the last checked result for validation polling
+            // Set to empty string so next validation will be detected
+            lastCheckedResult = '';
+
+            // Resume timer if it was auto-paused
+            if (typeof resumeTimerOnQuestionChange === 'function') {
+                resumeTimerOnQuestionChange();
+            }
         }
 
         function navigateQuestion(direction) {
@@ -5484,7 +5628,8 @@
 
                         return `
                             <div class="test-question-item ${qId == currentQuestionId ? 'active' : ''}"
-                                 onclick="openQuestion(${qId})">
+                                 onclick="openQuestion(${qId})"
+                                 data-question-id="${qId}">
                                 <div class="test-question-number">Q ${qId}</div>
                                 <div class="test-question-status">${statusIcons.join(' ')}</div>
                             </div>
@@ -5492,6 +5637,24 @@
                     }).join('')}
                 </div>
             `;
+        }
+
+        function updateSingleTopicSidebarItem(questionId) {
+            // Find the topic sidebar item for this specific question
+            const item = document.querySelector(`.test-question-item[data-question-id="${questionId}"]`);
+            if (!item) return;
+
+            const data = getData(questionId);
+            const statusIcons = [];
+            if (data.isFlagged) statusIcons.push('🚩');
+            if (data.isCorrect) statusIcons.push('✓');
+            if (data.isIncorrect) statusIcons.push('✗');
+
+            // Update only the status part
+            const statusElement = item.querySelector('.test-question-status');
+            if (statusElement) {
+                statusElement.textContent = statusIcons.join(' ');
+            }
         }
 
         // Media Maximizer Functions
@@ -7134,6 +7297,10 @@
             <button id="startPauseResumeBtn" class="stopwatch-btn">Start</button>
             <button id="stopBtn" class="stopwatch-btn">Stop</button>
         </div>
+        <div class="stopwatch-option">
+            <input type="checkbox" id="autoPauseOnSubmit" />
+            <label for="autoPauseOnSubmit">Auto-pausar no Submit</label>
+        </div>
     </div>
 
     <!-- Stopwatch Icon (when occluded) -->
@@ -7271,11 +7438,11 @@
                 plannerBtn.style.bottom = '220px';
                 ankiBtn.style.bottom = '290px';
             } else {
-                // When stopwatch is visible (expanded)
-                calcBtn.style.bottom = '170px';
-                labBtn.style.bottom = '240px';
-                plannerBtn.style.bottom = '310px';
-                ankiBtn.style.bottom = '380px';
+                // When stopwatch is visible (expanded with checkbox)
+                calcBtn.style.bottom = '220px';
+                labBtn.style.bottom = '290px';
+                plannerBtn.style.bottom = '360px';
+                ankiBtn.style.bottom = '430px';
             }
         }
 
@@ -7312,6 +7479,49 @@
 
         // Load stopwatch state on page load
         loadStopwatchState();
+
+        // Update button positions after loading stopwatch state
+        updateUIPositions();
+
+        // Auto-pause on Submit feature
+        const autoPauseCheckbox = document.getElementById('autoPauseOnSubmit');
+        let wasRunningBeforePause = false;
+
+        // Load auto-pause preference
+        const autoPausePref = localStorage.getItem('autoPauseOnSubmit');
+        if (autoPausePref === 'true') {
+            autoPauseCheckbox.checked = true;
+        }
+
+        // Save auto-pause preference when changed
+        autoPauseCheckbox.addEventListener('change', () => {
+            localStorage.setItem('autoPauseOnSubmit', autoPauseCheckbox.checked);
+        });
+
+        // Listen for Submit/Explanation open/close from iframe
+        window.addEventListener('message', (event) => {
+            if (event.data.type === 'submitOpened') {
+                // Only pause if checkbox is checked and timer is running
+                if (autoPauseCheckbox.checked && stopwatchState === 'running') {
+                    wasRunningBeforePause = true;
+                    pauseStopwatch();
+                }
+            } else if (event.data.type === 'submitClosed') {
+                // Resume if it was paused by submitOpened
+                if (autoPauseCheckbox.checked && wasRunningBeforePause && stopwatchState === 'paused') {
+                    wasRunningBeforePause = false;
+                    startStopwatch();
+                }
+            }
+        });
+
+        // Auto-resume when changing questions (if was auto-paused)
+        function resumeTimerOnQuestionChange() {
+            if (autoPauseCheckbox.checked && wasRunningBeforePause && stopwatchState === 'paused') {
+                wasRunningBeforePause = false;
+                startStopwatch();
+            }
+        }
 
         // Fullscreen Mode Functions
         let navbarTimeout, sidebarTimeout;
