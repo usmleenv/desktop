@@ -3160,6 +3160,9 @@
 
             // Setup iframe message handler for media clicks
             setupIframeMediaHandler();
+
+            // Reset the last checked choice for the polling function
+            lastCheckedChoice = data.selectedAnswer || '';
         }
 
         function closeQuestion() {
@@ -3351,7 +3354,51 @@
 
             // Sync both dropdowns
             updateAnswerDropdowns();
+
+            // Also save to the choice_q format that iframe uses
+            const choiceKey = 'choice_q' + currentQuestionId;
+            if (data.selectedAnswer) {
+                localStorage.setItem(choiceKey, data.selectedAnswer);
+            } else {
+                localStorage.removeItem(choiceKey);
+            }
+
+            // Update lastCheckedChoice to prevent loop
+            lastCheckedChoice = data.selectedAnswer;
         }
+
+        // Check for choice changes in iframe (using localStorage polling)
+        let lastCheckedChoice = '';
+
+        function checkIframeChoice() {
+            if (!currentQuestionId) return;
+
+            const choiceKey = 'choice_q' + currentQuestionId;
+            const currentChoice = localStorage.getItem(choiceKey) || '';
+
+            if (currentChoice && currentChoice !== lastCheckedChoice) {
+                lastCheckedChoice = currentChoice;
+
+                const testSelect = document.getElementById('test-answer-select');
+                const normalSelect = document.getElementById('normal-answer-select');
+
+                // Update both dropdowns
+                if (testSelect && testSelect.value !== currentChoice) {
+                    testSelect.value = currentChoice;
+                }
+                if (normalSelect && normalSelect.value !== currentChoice) {
+                    normalSelect.value = currentChoice;
+                }
+
+                // Save to our data structure
+                const data = getData(currentQuestionId);
+                data.selectedAnswer = currentChoice;
+                saveData(currentQuestionId, data);
+            }
+        }
+
+        // Check every 500ms for changes
+        setInterval(checkIframeChoice, 500);
 
         function toggleFlag() {
             if (!currentQuestionId) return;
@@ -3692,6 +3739,9 @@
 
             // Setup iframe media handler
             setupIframeMediaHandler();
+
+            // Reset the last checked choice for the polling function
+            lastCheckedChoice = data.selectedAnswer || '';
         }
 
         function navigateQuestion(direction) {
