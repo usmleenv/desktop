@@ -595,6 +595,46 @@
             box-shadow: 0 0 0 3px rgba(251, 140, 0, 0.3);
         }
 
+        .answer-selector {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-right: 12px;
+        }
+
+        .answer-selector label {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .answer-dropdown {
+            padding: 8px 12px;
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            background: white;
+            color: var(--text);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-width: 60px;
+        }
+
+        .answer-dropdown:hover {
+            border-color: var(--primary);
+        }
+
+        .answer-dropdown:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+        }
+
+        .answer-dropdown option {
+            padding: 8px;
+        }
+
         .test-action-btn.btn-flag {
             background: #ef5350;
             color: white;
@@ -1101,12 +1141,39 @@
             padding: 24px 28px;
             border-bottom: 1px solid var(--border);
             background: var(--primary-light);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
         }
 
         .modal-title {
             font-size: 20px;
             font-weight: 600;
             color: var(--primary);
+            flex: 1;
+        }
+
+        .modal-close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: #666;
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.2s;
+            margin-left: 16px;
+        }
+
+        .modal-close-btn:hover {
+            background: rgba(0, 0, 0, 0.1);
+            color: #333;
         }
 
         .modal-body {
@@ -2218,12 +2285,76 @@
         <div class="main-content">
             <!-- Test Mode Actions Bar -->
             <div class="test-actions-bar" id="test-actions-bar">
+                <div class="answer-selector">
+                    <label for="test-answer-select">My Answer:</label>
+                    <select id="test-answer-select" class="answer-dropdown" onchange="saveSelectedAnswer()">
+                        <option value="">-</option>
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                        <option value="D">D</option>
+                        <option value="E">E</option>
+                        <option value="F">F</option>
+                        <option value="G">G</option>
+                        <option value="H">H</option>
+                        <option value="I">I</option>
+                        <option value="J">J</option>
+                        <option value="K">K</option>
+                        <option value="L">L</option>
+                        <option value="M">M</option>
+                        <option value="N">N</option>
+                        <option value="O">O</option>
+                        <option value="P">P</option>
+                        <option value="Q">Q</option>
+                        <option value="R">R</option>
+                        <option value="S">S</option>
+                        <option value="T">T</option>
+                        <option value="U">U</option>
+                        <option value="V">V</option>
+                        <option value="W">W</option>
+                        <option value="X">X</option>
+                        <option value="Y">Y</option>
+                        <option value="Z">Z</option>
+                    </select>
+                </div>
                 <button class="test-action-btn btn-flag" id="test-flag-btn" onclick="toggleFlag()">🚩 Flag</button>
                 <button class="test-action-btn btn-correct" onclick="markQuestion('correct')">✓ Correct</button>
                 <button class="test-action-btn btn-incorrect" onclick="markQuestion('incorrect')">✗ Incorrect</button>
             </div>
             <!-- Normal Mode Actions Bar -->
             <div class="question-actions-bar" id="question-actions-bar">
+                <div class="answer-selector">
+                    <label for="normal-answer-select">My Answer:</label>
+                    <select id="normal-answer-select" class="answer-dropdown" onchange="saveSelectedAnswer()">
+                        <option value="">-</option>
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                        <option value="D">D</option>
+                        <option value="E">E</option>
+                        <option value="F">F</option>
+                        <option value="G">G</option>
+                        <option value="H">H</option>
+                        <option value="I">I</option>
+                        <option value="J">J</option>
+                        <option value="K">K</option>
+                        <option value="L">L</option>
+                        <option value="M">M</option>
+                        <option value="N">N</option>
+                        <option value="O">O</option>
+                        <option value="P">P</option>
+                        <option value="Q">Q</option>
+                        <option value="R">R</option>
+                        <option value="S">S</option>
+                        <option value="T">T</option>
+                        <option value="U">U</option>
+                        <option value="V">V</option>
+                        <option value="W">W</option>
+                        <option value="X">X</option>
+                        <option value="Y">Y</option>
+                        <option value="Z">Z</option>
+                    </select>
+                </div>
                 <button class="question-action-btn btn-flag" id="normal-flag-btn" onclick="toggleFlag()">🚩 Flag</button>
                 <button class="question-action-btn btn-correct" onclick="markQuestion('correct')">✓ Correct</button>
                 <button class="question-action-btn btn-incorrect" onclick="markQuestion('incorrect')">✗ Incorrect</button>
@@ -2267,6 +2398,7 @@
         <div class="modal-dialog">
             <div class="modal-header-bar">
                 <div class="modal-title">📊 Detailed Statistics by Topic</div>
+                <button class="modal-close-btn" onclick="closeStatsModal()">✕</button>
             </div>
             <div class="modal-body" id="stats-modal-body">
                 <!-- Will be populated dynamically -->
@@ -2274,7 +2406,6 @@
             <div class="modal-footer">
                 <button class="btn btn-primary" onclick="openProgressChartModal()">📈 Progress Chart</button>
                 <button class="btn btn-primary" onclick="openHeatmapModal()">🔥 Activity Heatmap</button>
-                <button class="btn btn-secondary" onclick="closeStatsModal()">Close</button>
             </div>
         </div>
     </div>
@@ -2284,6 +2415,7 @@
         <div class="modal-content" style="max-width: 1000px;">
             <div class="modal-header-bar">
                 <div class="modal-title">📈 Progress Over Time</div>
+                <button class="modal-close-btn" onclick="closeProgressChartModal()">✕</button>
             </div>
             <div class="modal-body">
                 <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; margin-bottom: 20px;">
@@ -2323,9 +2455,6 @@
                     <canvas id="progress-chart"></canvas>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeProgressChartModal()">Close</button>
-            </div>
         </div>
     </div>
 
@@ -2334,6 +2463,7 @@
         <div class="modal-content" style="max-width: 1200px;">
             <div class="modal-header-bar">
                 <div class="modal-title">🔥 Activity Heatmap</div>
+                <button class="modal-close-btn" onclick="closeHeatmapModal()">✕</button>
             </div>
             <div class="modal-body">
                 <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 20px; gap: 16px;">
@@ -2354,9 +2484,6 @@
                     <span style="font-size: 12px; color: var(--text-light);">More</span>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeHeatmapModal()">Close</button>
-            </div>
         </div>
     </div>
 
@@ -2365,6 +2492,7 @@
         <div class="modal-dialog">
             <div class="modal-header-bar">
                 <div class="modal-title">💾 Backup & Restore</div>
+                <button class="modal-close-btn" onclick="closeBackupModal()">✕</button>
             </div>
             <div class="modal-body">
                 <div class="form-section">
@@ -2391,9 +2519,6 @@
                     <button class="btn btn-primary" onclick="confirmResetFromBackup()">🔄 Reset Everything</button>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeBackupModal()">Close</button>
-            </div>
         </div>
     </div>
 
@@ -2402,6 +2527,7 @@
         <div class="modal-dialog" style="max-width: 700px;">
             <div class="modal-header-bar">
                 <div class="modal-title">📓 Notes for Question <span id="notes-question-id"></span></div>
+                <button class="modal-close-btn" onclick="closeNotesModal()">✕</button>
             </div>
             <div class="modal-body">
                 <textarea
@@ -2422,12 +2548,10 @@
         <div class="modal-dialog">
             <div class="modal-header-bar">
                 <div class="modal-title" id="ids-modal-title">📋 Question IDs</div>
+                <button class="modal-close-btn" onclick="closeIdsModal()">✕</button>
             </div>
             <div class="modal-body" id="ids-modal-body" style="max-height: 70vh; overflow-y: auto;">
                 <!-- Will be populated dynamically -->
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeIdsModal()">Close</button>
             </div>
         </div>
     </div>
@@ -2437,6 +2561,7 @@
         <div class="modal-dialog">
             <div class="modal-header-bar">
                 <div class="modal-title">🔄 Reset All Progress</div>
+                <button class="modal-close-btn" onclick="closeResetModal()">✕</button>
             </div>
             <div class="modal-body">
                 <div class="alert alert-warning">
@@ -2463,6 +2588,7 @@
         <div class="modal-dialog" style="max-width: 900px;">
             <div class="modal-header-bar">
                 <div class="modal-title">🎯 Study Planner</div>
+                <button class="modal-close-btn" onclick="closeStudyPlannerModal()">✕</button>
             </div>
             <div class="modal-body">
                 <!-- Mode Selection -->
@@ -2531,9 +2657,6 @@
                     <div id="weak-results" style="margin-top: 20px;"></div>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeStudyPlannerModal()">Close</button>
-            </div>
         </div>
     </div>
 
@@ -2542,6 +2665,7 @@
         <div class="modal-dialog" style="max-width: 1000px;">
             <div class="modal-header-bar">
                 <div class="modal-title">📋 Test History</div>
+                <button class="modal-close-btn" onclick="closeTestHistoryModal()">✕</button>
             </div>
             <div class="modal-body">
                 <div class="form-section">
@@ -2555,9 +2679,6 @@
                     <!-- Will be populated dynamically -->
                 </div>
             </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeTestHistoryModal()">Close</button>
-            </div>
         </div>
     </div>
 
@@ -2566,6 +2687,7 @@
         <div class="modal-dialog" style="max-width: 700px;">
             <div class="modal-header-bar">
                 <div class="modal-title">⭐ Anki Converter</div>
+                <button class="modal-close-btn" onclick="closeAnkiConverterModal()">✕</button>
             </div>
             <div class="modal-body">
                 <!-- Source Selection -->
@@ -2620,9 +2742,6 @@
                         <button class="btn btn-primary" onclick="copyAnkiQuery()">📋 Copy to Clipboard</button>
                     </div>
                 </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeAnkiConverterModal()">Close</button>
             </div>
         </div>
     </div>
@@ -3193,6 +3312,45 @@
                 normalCorrectBtn.classList.toggle('selected', data.isCorrect);
                 normalIncorrectBtn.classList.toggle('selected', data.isIncorrect);
             }
+
+            // Update answer dropdowns
+            updateAnswerDropdowns();
+        }
+
+        function updateAnswerDropdowns() {
+            if (!currentQuestionId) return;
+
+            const data = getData(currentQuestionId);
+            const testSelect = document.getElementById('test-answer-select');
+            const normalSelect = document.getElementById('normal-answer-select');
+
+            if (testSelect) {
+                testSelect.value = data.selectedAnswer || '';
+            }
+            if (normalSelect) {
+                normalSelect.value = data.selectedAnswer || '';
+            }
+        }
+
+        function saveSelectedAnswer() {
+            if (!currentQuestionId) return;
+
+            const data = getData(currentQuestionId);
+
+            // Get value from whichever dropdown is visible
+            const testSelect = document.getElementById('test-answer-select');
+            const normalSelect = document.getElementById('normal-answer-select');
+
+            if (isTestMode && testSelect) {
+                data.selectedAnswer = testSelect.value;
+            } else if (normalSelect) {
+                data.selectedAnswer = normalSelect.value;
+            }
+
+            saveData(currentQuestionId, data);
+
+            // Sync both dropdowns
+            updateAnswerDropdowns();
         }
 
         function toggleFlag() {
@@ -3551,7 +3709,8 @@
                 isCorrect: false,
                 isIncorrect: false,
                 isFlagged: false,
-                attempts: 0
+                attempts: 0,
+                selectedAnswer: ''
             };
         }
 
@@ -4249,15 +4408,17 @@
                 const isFlagged = oldQuestion.mark === true; // Explicitly check for true
                 const isCorrect = oldQuestion.correct === true;
                 const isIncorrect = oldQuestion.incorrect === true;
+                const selectedAnswer = oldQuestion.choice || ''; // Migrate the selected answer letter
 
                 // Only add question if it has any data (not just an empty object)
-                if (oldQuestion.date || isCorrect || isIncorrect || isFlagged) {
+                if (oldQuestion.date || isCorrect || isIncorrect || isFlagged || selectedAnswer) {
                     newData[qId] = {
                         isFlagged: isFlagged,
                         isCorrect: isCorrect,
                         isIncorrect: isIncorrect,
                         attempts: (isCorrect || isIncorrect) ? 1 : 0,
-                        lastAttempted: oldQuestion.date || new Date().toISOString().split('T')[0]
+                        lastAttempted: oldQuestion.date || new Date().toISOString().split('T')[0],
+                        selectedAnswer: selectedAnswer
                     };
 
                     // Count statistics
