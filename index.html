@@ -2451,6 +2451,8 @@
                             <option value="incorrect">Incorrect</option>
                             <option value="marked">Marked</option>
                             <option value="accuracy">Accuracy (%)</option>
+                            <option value="totalTime">Total Time (minutes)</option>
+                            <option value="avgTime">Avg Time per Question (seconds)</option>
                         </select>
                     </div>
                     <div>
@@ -3675,6 +3677,13 @@
             container.classList.add('test-mode');
             document.body.classList.add('test-mode-active');
 
+            // Auto-start stopwatch and enable auto-pause
+            stopStopwatch(); // Reset stopwatch first
+            const autoPauseCheckbox = document.getElementById('autoPauseOnSubmit');
+            autoPauseCheckbox.checked = true;
+            localStorage.setItem('autoPauseOnSubmit', 'true');
+            startStopwatch(); // Start automatically
+
             // Render test sidebar
             renderTestSidebar();
 
@@ -3692,6 +3701,9 @@
             if (!confirm('Are you sure you want to finish this test?')) {
                 return;
             }
+
+            // Update test time in history before finishing
+            updateTestTimeInHistory();
 
             // Exit fullscreen if active
             if (document.body.classList.contains('fullscreen-mode')) {
@@ -4130,6 +4142,7 @@
 
             // Get all question data with lastAttempted dates
             const questionData = JSON.parse(localStorage.getItem('questionData') || '{}');
+            const testHistory = JSON.parse(localStorage.getItem('testHistory') || '[]');
             const dailyStats = {};
 
             // Process data - aggregate by day first
@@ -4144,7 +4157,7 @@
                         const date = data.lastAttempted; // Already in YYYY-MM-DD format
 
                         if (!dailyStats[date]) {
-                            dailyStats[date] = { total: 0, correct: 0, incorrect: 0, marked: 0 };
+                            dailyStats[date] = { total: 0, correct: 0, incorrect: 0, marked: 0, totalTime: 0, questionCount: 0 };
                         }
 
                         if (data.isCorrect || data.isIncorrect) {
@@ -4156,6 +4169,18 @@
                     });
                 }
             }
+
+            // Add time data from test history
+            testHistory.forEach(test => {
+                const dateStr = test.date.split('T')[0]; // Get YYYY-MM-DD from ISO string
+
+                if (!dailyStats[dateStr]) {
+                    dailyStats[dateStr] = { total: 0, correct: 0, incorrect: 0, marked: 0, totalTime: 0, questionCount: 0 };
+                }
+
+                dailyStats[dateStr].totalTime += test.totalTime || 0;
+                dailyStats[dateStr].questionCount += test.questionCount || 0;
+            });
 
             // Group data by period
             const periodStats = {};
@@ -4178,24 +4203,34 @@
                 }
 
                 if (!periodStats[periodKey]) {
-                    periodStats[periodKey] = { total: 0, correct: 0, incorrect: 0, marked: 0 };
+                    periodStats[periodKey] = { total: 0, correct: 0, incorrect: 0, marked: 0, totalTime: 0, questionCount: 0 };
                 }
 
                 periodStats[periodKey].total += dailyStats[dateStr].total;
                 periodStats[periodKey].correct += dailyStats[dateStr].correct;
                 periodStats[periodKey].incorrect += dailyStats[dateStr].incorrect;
                 periodStats[periodKey].marked += dailyStats[dateStr].marked;
+                periodStats[periodKey].totalTime += dailyStats[dateStr].totalTime;
+                periodStats[periodKey].questionCount += dailyStats[dateStr].questionCount;
             });
 
             // Prepare chart data (NON-CUMULATIVE)
             const labels = Object.keys(periodStats).sort();
             const data = labels.map(label => {
+                const stats = periodStats[label];
+
                 if (metric === 'accuracy') {
-                    const stats = periodStats[label];
                     const attempted = stats.correct + stats.incorrect;
                     return attempted > 0 ? ((stats.correct / attempted) * 100).toFixed(1) : 0;
+                } else if (metric === 'totalTime') {
+                    // Convert from milliseconds to minutes
+                    return (stats.totalTime / 60000).toFixed(1);
+                } else if (metric === 'avgTime') {
+                    // Convert from milliseconds to seconds
+                    const avgMs = stats.questionCount > 0 ? stats.totalTime / stats.questionCount : 0;
+                    return (avgMs / 1000).toFixed(1);
                 }
-                return periodStats[label][metric];
+                return stats[metric];
             });
 
             // Create/update chart
@@ -4242,6 +4277,14 @@
                 accuracy: {
                     bg: 'rgba(156, 39, 176, 0.7)',    // Purple
                     border: '#9c27b0'
+                },
+                totalTime: {
+                    bg: 'rgba(255, 112, 67, 0.7)',    // Orange
+                    border: '#ff7043'
+                },
+                avgTime: {
+                    bg: 'rgba(0, 188, 212, 0.7)',     // Cyan
+                    border: '#00bcd4'
                 }
             };
 
@@ -4340,6 +4383,7 @@
         function renderHeatmap() {
             const container = document.getElementById('heatmap-container');
             const questionData = JSON.parse(localStorage.getItem('questionData') || '{}');
+            const testHistory = JSON.parse(localStorage.getItem('testHistory') || '[]');
 
             // Aggregate data by date
             const dailyActivity = {};
@@ -4353,7 +4397,7 @@
                 if (date.getFullYear() !== currentHeatmapYear) continue;
 
                 if (!dailyActivity[dateStr]) {
-                    dailyActivity[dateStr] = { total: 0, correct: 0, incorrect: 0, marked: 0 };
+                    dailyActivity[dateStr] = { total: 0, correct: 0, incorrect: 0, marked: 0, totalTime: 0 };
                 }
 
                 if (data.isCorrect || data.isIncorrect) {
@@ -4363,6 +4407,19 @@
                 if (data.isIncorrect) dailyActivity[dateStr].incorrect++;
                 if (data.isFlagged) dailyActivity[dateStr].marked++;
             }
+
+            // Add time data from test history
+            testHistory.forEach(test => {
+                const dateStr = test.date.split('T')[0]; // Get YYYY-MM-DD from ISO string
+                const date = new Date(dateStr + 'T00:00:00');
+                if (date.getFullYear() !== currentHeatmapYear) return;
+
+                if (!dailyActivity[dateStr]) {
+                    dailyActivity[dateStr] = { total: 0, correct: 0, incorrect: 0, marked: 0, totalTime: 0 };
+                }
+
+                dailyActivity[dateStr].totalTime += test.totalTime || 0;
+            });
 
             // Build heatmap grid
             const startDate = new Date(currentHeatmapYear, 0, 1);
@@ -4402,7 +4459,7 @@
 
                 for (let day = 0; day < 7; day++) {
                     const dateStr = currentDate.toISOString().split('T')[0];
-                    const activity = dailyActivity[dateStr] || { total: 0, correct: 0, incorrect: 0, marked: 0 };
+                    const activity = dailyActivity[dateStr] || { total: 0, correct: 0, incorrect: 0, marked: 0, totalTime: 0 };
                     const color = getHeatmapColor(activity.total);
 
                     const isCurrentYear = currentDate.getFullYear() === currentHeatmapYear;
@@ -4410,7 +4467,7 @@
 
                     html += `<div class="heatmap-day"
                         style="background: ${color}; opacity: ${opacity};"
-                        onmouseenter="showHeatmapTooltip(event, '${dateStr}', ${activity.total}, ${activity.correct}, ${activity.incorrect}, ${activity.marked})"
+                        onmouseenter="showHeatmapTooltip(event, '${dateStr}', ${activity.total}, ${activity.correct}, ${activity.incorrect}, ${activity.marked}, ${activity.totalTime})"
                         onmouseleave="hideHeatmapTooltip()"
                     ></div>`;
 
@@ -4426,7 +4483,7 @@
 
         let heatmapTooltip = null;
 
-        function showHeatmapTooltip(event, date, total, correct, incorrect, marked) {
+        function showHeatmapTooltip(event, date, total, correct, incorrect, marked, totalTime) {
             if (!heatmapTooltip) {
                 heatmapTooltip = document.createElement('div');
                 heatmapTooltip.className = 'heatmap-tooltip';
@@ -4440,12 +4497,18 @@
                 day: 'numeric'
             });
 
+            // Format time
+            const totalMinutes = Math.floor(totalTime / 60000);
+            const totalSeconds = Math.floor((totalTime % 60000) / 1000);
+            const timeStr = totalTime > 0 ? `${totalMinutes}m ${totalSeconds}s` : '0m 0s';
+
             heatmapTooltip.innerHTML = `
                 <div class="heatmap-tooltip-date">${formattedDate}</div>
                 <div class="heatmap-tooltip-stat">Total: ${total}</div>
                 <div class="heatmap-tooltip-stat">Correct: ${correct}</div>
                 <div class="heatmap-tooltip-stat">Incorrect: ${incorrect}</div>
                 <div class="heatmap-tooltip-stat">Marked: ${marked}</div>
+                <div class="heatmap-tooltip-stat" style="border-top: 1px solid rgba(255,255,255,0.2); margin-top: 4px; padding-top: 4px;">Time: ${timeStr}</div>
             `;
 
             heatmapTooltip.style.display = 'block';
@@ -4693,10 +4756,31 @@
                 id: 'test_' + Date.now(),
                 questionIds: questionIds,
                 date: new Date().toISOString(),
-                questionCount: questionIds.length
+                questionCount: questionIds.length,
+                totalTime: 0, // Will be updated when test finishes
+                timePerQuestion: 0, // Will be updated when test finishes
+                startTime: Date.now() // Track when test started
             };
 
             history.push(testEntry);
+            localStorage.setItem('testHistory', JSON.stringify(history));
+        }
+
+        function updateTestTimeInHistory() {
+            const history = JSON.parse(localStorage.getItem('testHistory') || '[]');
+
+            if (history.length === 0) return;
+
+            // Update the most recent test (last in array)
+            const lastTest = history[history.length - 1];
+
+            // Get current stopwatch time (in milliseconds)
+            const totalTime = elapsedMs;
+            const timePerQuestion = lastTest.questionCount > 0 ? Math.round(totalTime / lastTest.questionCount) : 0;
+
+            lastTest.totalTime = totalTime;
+            lastTest.timePerQuestion = timePerQuestion;
+
             localStorage.setItem('testHistory', JSON.stringify(history));
         }
 
@@ -4758,7 +4842,35 @@
                 const isImported = test.id.startsWith('imported_');
                 const label = isImported ? '📥 Imported' : '🎯 Test';
 
-                const idsString = test.questionIds.join(', ');
+                // Categorize questions by status
+                let correctIds = [];
+                let incorrectIds = [];
+                let markedIds = [];
+                let allIds = test.questionIds;
+
+                test.questionIds.forEach(qId => {
+                    const data = questionData[qId];
+                    if (data) {
+                        if (data.isCorrect) correctIds.push(qId);
+                        if (data.isIncorrect) incorrectIds.push(qId);
+                        if (data.isFlagged) markedIds.push(qId);
+                    }
+                });
+
+                const accuracy = (correctIds.length + incorrectIds.length) > 0
+                    ? Math.round((correctIds.length / (correctIds.length + incorrectIds.length)) * 100)
+                    : 0;
+
+                // Format time
+                const totalTime = test.totalTime || 0;
+                const timePerQuestion = test.timePerQuestion || 0;
+
+                const totalMinutes = Math.floor(totalTime / 60000);
+                const totalSeconds = Math.floor((totalTime % 60000) / 1000);
+                const totalTimeStr = totalTime > 0 ? `${totalMinutes}m ${totalSeconds}s` : 'N/A';
+
+                const avgSeconds = Math.floor(timePerQuestion / 1000);
+                const avgTimeStr = timePerQuestion > 0 ? `${avgSeconds}s` : 'N/A';
 
                 html += `
                     <div class="planner-card">
@@ -4768,19 +4880,97 @@
                                 ${test.questionCount} questions
                             </div>
                         </div>
+
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0;">
+                            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 16px; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 24px; font-weight: 700; color: white;">${accuracy}%</div>
+                                <div style="font-size: 12px; color: rgba(255,255,255,0.9); margin-top: 4px;">Accuracy</div>
+                            </div>
+                            <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 16px; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 24px; font-weight: 700; color: white;">${totalTimeStr}</div>
+                                <div style="font-size: 12px; color: rgba(255,255,255,0.9); margin-top: 4px;">Total Time</div>
+                            </div>
+                            <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); padding: 16px; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 24px; font-weight: 700; color: white;">${avgTimeStr}</div>
+                                <div style="font-size: 12px; color: rgba(255,255,255,0.9); margin-top: 4px;">Avg per Question</div>
+                            </div>
+                        </div>
+
                         <div class="planner-card-strategy">
-                            <strong>Question IDs:</strong><br>
-                            <textarea readonly style="width: 100%; min-height: 60px; margin-top: 8px; padding: 8px; font-family: monospace; font-size: 12px; border: 1px solid var(--border); border-radius: 4px;">${idsString}</textarea>
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                <strong>Question IDs:</strong>
+                                <select id="filter-${test.id}" class="form-input" style="width: auto; padding: 4px 8px; font-size: 12px;" onchange="updateTestHistoryIds('${test.id}')">
+                                    <option value="all">All (${allIds.length})</option>
+                                    <option value="correct">Correct (${correctIds.length})</option>
+                                    <option value="incorrect">Incorrect (${incorrectIds.length})</option>
+                                    <option value="marked">Marked (${markedIds.length})</option>
+                                </select>
+                            </div>
+                            <textarea readonly id="ids-${test.id}" style="width: 100%; min-height: 60px; padding: 8px; font-family: monospace; font-size: 12px; border: 1px solid var(--border); border-radius: 4px;">${allIds.join(', ')}</textarea>
                         </div>
                         <div class="planner-card-actions">
-                            <button class="btn btn-secondary" onclick="copyToClipboard('${idsString.replace(/'/g, "\\'")}')">📋 Copy IDs</button>
-                            <button class="btn btn-primary" onclick="startTestWithIds('${idsString.replace(/'/g, "\\'")}')">▶ Start Test</button>
+                            <button class="btn btn-secondary" onclick="copyTestHistoryIds('${test.id}')">📋 Copy IDs</button>
+                            <button class="btn btn-primary" onclick="startTestWithTestHistoryIds('${test.id}')">▶ Start Test</button>
                         </div>
                     </div>
                 `;
+
+                // Store the categorized IDs for this test
+                window['testHistoryData_' + test.id] = {
+                    all: allIds,
+                    correct: correctIds,
+                    incorrect: incorrectIds,
+                    marked: markedIds
+                };
             });
 
             container.innerHTML = html;
+        }
+
+        function updateTestHistoryIds(testId) {
+            const filterSelect = document.getElementById('filter-' + testId);
+            const idsTextarea = document.getElementById('ids-' + testId);
+            const filterValue = filterSelect.value;
+
+            const data = window['testHistoryData_' + testId];
+            if (!data) return;
+
+            const selectedIds = data[filterValue] || [];
+            idsTextarea.value = selectedIds.join(', ');
+        }
+
+        function copyTestHistoryIds(testId) {
+            const idsTextarea = document.getElementById('ids-' + testId);
+            const text = idsTextarea.value;
+
+            // Try modern clipboard API first
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => {
+                    // Visual feedback
+                    const btn = event.target;
+                    const originalText = btn.textContent;
+                    btn.textContent = '✓ Copied!';
+                    btn.style.background = '#4caf50';
+                    setTimeout(() => {
+                        btn.textContent = originalText;
+                        btn.style.background = '';
+                    }, 2000);
+                }).catch(err => {
+                    console.error('Clipboard API failed:', err);
+                });
+            }
+        }
+
+        function startTestWithTestHistoryIds(testId) {
+            const idsTextarea = document.getElementById('ids-' + testId);
+            const idsString = idsTextarea.value;
+
+            if (!idsString || idsString.trim() === '') {
+                alert('No questions selected. Please select a filter option.');
+                return;
+            }
+
+            startTestWithIds(idsString);
         }
 
         function groupQuestionsByDate(questionData) {
@@ -5087,25 +5277,7 @@
             `;
         }
 
-        function copyToClipboard(text) {
-            // Create temporary textarea
-            const textarea = document.createElement('textarea');
-            textarea.value = text;
-            textarea.style.position = 'fixed';
-            textarea.style.opacity = '0';
-            document.body.appendChild(textarea);
-            textarea.select();
-
-            try {
-                document.execCommand('copy');
-                alert('✅ Question IDs copied to clipboard!');
-            } catch (err) {
-                console.error('Failed to copy:', err);
-                alert('❌ Failed to copy. Please copy manually.');
-            } finally {
-                document.body.removeChild(textarea);
-            }
-        }
+        // Removed - using unified copyToClipboard function below
 
         function startTestWithIds(idsString) {
             const questionIds = idsString.split(',').map(id => id.trim());
@@ -5124,6 +5296,13 @@
             const container = document.getElementById('container');
             container.classList.add('test-mode');
             document.body.classList.add('test-mode-active');
+
+            // Auto-start stopwatch and enable auto-pause
+            stopStopwatch(); // Reset stopwatch first
+            const autoPauseCheckbox = document.getElementById('autoPauseOnSubmit');
+            autoPauseCheckbox.checked = true;
+            localStorage.setItem('autoPauseOnSubmit', 'true');
+            startStopwatch(); // Start automatically
 
             renderTestSidebar();
             openTestQuestion(currentTestIndex);
@@ -6280,7 +6459,38 @@
         }
 
         function copyToClipboard(text) {
-            navigator.clipboard.writeText(text).then(() => {
+            // Try modern clipboard API first
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => {
+                    // Visual feedback
+                    const btn = event.target;
+                    const originalText = btn.textContent;
+                    btn.textContent = '✓ Copied!';
+                    btn.style.background = '#4caf50';
+                    setTimeout(() => {
+                        btn.textContent = originalText;
+                        btn.style.background = '';
+                    }, 2000);
+                }).catch(err => {
+                    console.error('Clipboard API failed, trying fallback:', err);
+                    copyToClipboardFallback(text);
+                });
+            } else {
+                // Fallback for older browsers
+                copyToClipboardFallback(text);
+            }
+        }
+
+        function copyToClipboardFallback(text) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+
+            try {
+                document.execCommand('copy');
                 // Visual feedback
                 const btn = event.target;
                 const originalText = btn.textContent;
@@ -6290,9 +6500,11 @@
                     btn.textContent = originalText;
                     btn.style.background = '';
                 }, 2000);
-            }).catch(err => {
-                alert('Failed to copy: ' + err);
-            });
+            } catch (err) {
+                console.error('Failed to copy:', err);
+            } finally {
+                document.body.removeChild(textarea);
+            }
         }
 
         // Click outside modal to close
@@ -7299,7 +7511,7 @@
         </div>
         <div class="stopwatch-option">
             <input type="checkbox" id="autoPauseOnSubmit" />
-            <label for="autoPauseOnSubmit">Auto-pausar no Submit</label>
+            <label for="autoPauseOnSubmit">Auto-pause on Submit</label>
         </div>
     </div>
 
@@ -7402,6 +7614,13 @@
         }
 
         startPauseResumeBtn.addEventListener('click', () => {
+            // Check if in test mode and show warning
+            if (isTestMode && stopwatchState !== 'stopped') {
+                if (!confirm('⚠️ Warning: Manual timer changes will affect test metrics!\n\nThis will impact:\n• Total test time\n• Average time per question\n\nDo you want to proceed?')) {
+                    return;
+                }
+            }
+
             if (stopwatchState === 'stopped') {
                 startStopwatch();
             } else if (stopwatchState === 'running') {
@@ -7411,7 +7630,15 @@
             }
         });
 
-        stopBtn.addEventListener('click', stopStopwatch);
+        stopBtn.addEventListener('click', () => {
+            // Check if in test mode and show warning
+            if (isTestMode && stopwatchState !== 'stopped') {
+                if (!confirm('⚠️ Warning: Stopping the timer will affect test metrics!\n\nThis will impact:\n• Total test time\n• Average time per question\n\nDo you want to proceed?')) {
+                    return;
+                }
+            }
+            stopStopwatch();
+        });
 
         occludeBtn.addEventListener('click', () => {
             containerEl.style.display = 'none';
