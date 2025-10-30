@@ -2905,16 +2905,29 @@
         }
 
         // Test State Persistence
+        // Generate unique test ID based on question IDs
+        function getTestId(questions) {
+            return questions.sort((a, b) => a - b).join('-');
+        }
+
         function saveTestState() {
             if (!isTestMode) return;
 
+            const testId = getTestId([...testQuestions]);
             const testState = {
                 isTestMode: true,
                 testQuestions: testQuestions,
                 currentTestIndex: currentTestIndex,
+                testId: testId,
                 timestamp: Date.now()
             };
             localStorage.setItem('testState', JSON.stringify(testState));
+
+            // Also save last test position separately for quick restore
+            localStorage.setItem('lastTestPosition', JSON.stringify({
+                testId: testId,
+                questionIndex: currentTestIndex
+            }));
         }
 
         function restoreTestState() {
@@ -2967,6 +2980,8 @@
 
         function clearTestState() {
             localStorage.removeItem('testState');
+            localStorage.removeItem('lastTestPosition');
+            localStorage.removeItem('testSidebarScroll');
         }
 
         function handleKeyPress(e) {
@@ -3337,13 +3352,13 @@
             if (isTestMode) {
                 // Update test sidebar to show new status
                 renderTestSidebar();
-                // Scroll to active question
-                setTimeout(() => {
-                    const activeItem = document.querySelector('.test-question-item.active');
-                    if (activeItem) {
-                        activeItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                    }
-                }, 100);
+                // Scroll disabled - using persistent scroll position instead
+                // setTimeout(() => {
+                //     const activeItem = document.querySelector('.test-question-item.active');
+                //     if (activeItem) {
+                //         activeItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                //     }
+                // }, 100);
             } else {
                 const container = document.getElementById('container');
                 if (container.classList.contains('viewing-question')) {
@@ -3780,6 +3795,10 @@
 
         function renderTestSidebar() {
             const sidebar = document.querySelector('.sidebar');
+
+            // Save current scroll position before re-rendering
+            const currentScroll = sidebar.scrollTop || 0;
+
             sidebar.classList.add('test-mode');
             sidebar.innerHTML = `
                 <div class="test-sidebar-header">
@@ -3806,6 +3825,53 @@
                     }).join('')}
                 </div>
             `;
+
+            // Restore scroll position
+            const testId = getTestId([...testQuestions]);
+            const savedScrollData = localStorage.getItem('testSidebarScroll');
+
+            if (savedScrollData) {
+                try {
+                    const scrollData = JSON.parse(savedScrollData);
+                    // Only restore if it's the same test
+                    if (scrollData.testId === testId) {
+                        sidebar.scrollTop = scrollData.scrollPosition;
+                    } else {
+                        // Different test, use current scroll or reset
+                        sidebar.scrollTop = currentScroll;
+                    }
+                } catch (e) {
+                    sidebar.scrollTop = currentScroll;
+                }
+            } else {
+                sidebar.scrollTop = currentScroll;
+            }
+
+            // Setup scroll listener for this test
+            setupTestSidebarScrollListener();
+        }
+
+        function setupTestSidebarScrollListener() {
+            const sidebar = document.querySelector('.sidebar');
+            if (!sidebar || !isTestMode) return;
+
+            // Remove existing listener if any
+            sidebar.removeEventListener('scroll', handleTestSidebarScroll);
+
+            // Add new listener
+            sidebar.addEventListener('scroll', handleTestSidebarScroll);
+        }
+
+        function handleTestSidebarScroll() {
+            if (!isTestMode || testQuestions.length === 0) return;
+
+            const sidebar = document.querySelector('.sidebar');
+            const testId = getTestId([...testQuestions]);
+
+            localStorage.setItem('testSidebarScroll', JSON.stringify({
+                testId: testId,
+                scrollPosition: sidebar.scrollTop
+            }));
         }
 
         function updateSingleTestQuestionItem(questionId) {
@@ -3834,8 +3900,8 @@
             document.querySelectorAll('.test-question-item').forEach((item, i) => {
                 if (i === index) {
                     item.classList.add('active');
-                    // Scroll active item into view smoothly
-                    item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    // Scroll disabled - using persistent scroll position instead
+                    // item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 } else {
                     item.classList.remove('active');
                 }
@@ -3903,6 +3969,9 @@
             if (typeof resumeTimerOnQuestionChange === 'function') {
                 resumeTimerOnQuestionChange();
             }
+
+            // Save test state (position) for recovery
+            saveTestState();
         }
 
         function navigateQuestion(direction) {
