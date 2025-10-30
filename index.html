@@ -3705,6 +3705,11 @@
             // Update test time in history before finishing
             updateTestTimeInHistory();
 
+            // Pause stopwatch if it's running
+            if (stopwatchState === 'running') {
+                pauseStopwatch();
+            }
+
             // Exit fullscreen if active
             if (document.body.classList.contains('fullscreen-mode')) {
                 exitFullscreen();
@@ -4136,9 +4141,17 @@
 
         function updateProgressChart() {
             const metric = document.getElementById('chart-metric-filter').value;
+            const systemFilterContainer = document.getElementById('chart-system-filter').parentElement;
             const selectedSystem = document.getElementById('chart-system-filter').value;
             const period = document.getElementById('chart-period-filter').value;
             const chartType = document.getElementById('chart-type-filter').value;
+
+            // Hide system filter for time metrics
+            if (metric === 'totalTime' || metric === 'avgTime') {
+                systemFilterContainer.style.display = 'none';
+            } else {
+                systemFilterContainer.style.display = 'block';
+            }
 
             // Get all question data with lastAttempted dates
             const questionData = JSON.parse(localStorage.getItem('questionData') || '{}');
@@ -4171,6 +4184,7 @@
             }
 
             // Add time data from test history
+            // Time metrics are NOT filtered by system - always show total time for all tests
             testHistory.forEach(test => {
                 const dateStr = test.date.split('T')[0]; // Get YYYY-MM-DD from ISO string
 
@@ -4178,6 +4192,7 @@
                     dailyStats[dateStr] = { total: 0, correct: 0, incorrect: 0, marked: 0, totalTime: 0, questionCount: 0 };
                 }
 
+                // Always add total time regardless of system filter
                 dailyStats[dateStr].totalTime += test.totalTime || 0;
                 dailyStats[dateStr].questionCount += test.questionCount || 0;
             });
@@ -4748,9 +4763,33 @@
             }
         }
 
+        // Helper function to find which system a question belongs to
+        function getSystemForQuestionId(qId) {
+            for (const system in topics) {
+                for (const topic in topics[system]) {
+                    if (topics[system][topic].includes(qId)) {
+                        return system;
+                    }
+                }
+            }
+            return null; // Question not found in any system
+        }
+
         // Test History Functions
         function saveTestToHistory(questionIds) {
             const history = JSON.parse(localStorage.getItem('testHistory') || '[]');
+
+            // Group questions by system
+            const systemBreakdown = {};
+            questionIds.forEach(qId => {
+                const system = getSystemForQuestionId(qId);
+                if (system) {
+                    if (!systemBreakdown[system]) {
+                        systemBreakdown[system] = [];
+                    }
+                    systemBreakdown[system].push(qId);
+                }
+            });
 
             const testEntry = {
                 id: 'test_' + Date.now(),
@@ -4759,6 +4798,8 @@
                 questionCount: questionIds.length,
                 totalTime: 0, // Will be updated when test finishes
                 timePerQuestion: 0, // Will be updated when test finishes
+                systemBreakdown: systemBreakdown, // Store which questions belong to which system
+                timeBySystem: {}, // Will be updated when test finishes
                 startTime: Date.now() // Track when test started
             };
 
@@ -4780,6 +4821,17 @@
 
             lastTest.totalTime = totalTime;
             lastTest.timePerQuestion = timePerQuestion;
+
+            // Calculate time per system based on proportion of questions
+            const timeBySystem = {};
+            if (lastTest.systemBreakdown) {
+                for (const system in lastTest.systemBreakdown) {
+                    const questionsInSystem = lastTest.systemBreakdown[system].length;
+                    const proportion = questionsInSystem / lastTest.questionCount;
+                    timeBySystem[system] = Math.round(totalTime * proportion);
+                }
+            }
+            lastTest.timeBySystem = timeBySystem;
 
             localStorage.setItem('testHistory', JSON.stringify(history));
         }
