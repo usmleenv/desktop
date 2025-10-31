@@ -2886,11 +2886,96 @@
             console.log('Q-Bank content loaded');
         }
 
+        // Data Migration - Ensure all questions have required fields
+        function migrateQuestionData() {
+            try {
+                const questionData = JSON.parse(localStorage.getItem('questionData') || '{}');
+                const testHistory = JSON.parse(localStorage.getItem('testHistory') || '[]');
+                let migrated = false;
+
+                // Group questions by date for testId assignment
+                const questionsByDate = {};
+
+                // First pass: ensure all questions have lastAttempted and group by date
+                for (const qId in questionData) {
+                    const data = questionData[qId];
+
+                    // If no lastAttempted, try to infer or set to unknown
+                    if (!data.lastAttempted) {
+                        // Try to find from testHistory
+                        let foundDate = null;
+                        for (const test of testHistory) {
+                            if (test.questionIds && test.questionIds.includes(parseInt(qId))) {
+                                foundDate = test.date.split('T')[0]; // YYYY-MM-DD
+                                break;
+                            }
+                        }
+
+                        if (foundDate) {
+                            data.lastAttempted = foundDate;
+                        } else if (data.isCorrect || data.isIncorrect || data.attempts > 0) {
+                            // Question was attempted but no date - use a generic old date
+                            data.lastAttempted = '2024-01-01';
+                        } else {
+                            // Not yet attempted - don't set a date
+                            data.lastAttempted = '';
+                        }
+                        migrated = true;
+                    }
+
+                    // Group by date for testId assignment
+                    if (data.lastAttempted && (data.isCorrect || data.isIncorrect || data.attempts > 0)) {
+                        if (!questionsByDate[data.lastAttempted]) {
+                            questionsByDate[data.lastAttempted] = [];
+                        }
+                        questionsByDate[data.lastAttempted].push(qId);
+                    }
+                }
+
+                // Second pass: assign testId to questions without one
+                for (const qId in questionData) {
+                    const data = questionData[qId];
+
+                    // If no testId but has a date and was attempted
+                    if (!data.testId && data.lastAttempted && (data.isCorrect || data.isIncorrect || data.attempts > 0)) {
+                        // Try to find from testHistory first
+                        let foundTestId = null;
+                        for (const test of testHistory) {
+                            if (test.questionIds && test.questionIds.includes(parseInt(qId))) {
+                                foundTestId = test.id;
+                                break;
+                            }
+                        }
+
+                        if (foundTestId) {
+                            data.testId = foundTestId;
+                        } else {
+                            // Create a generic testId based on date
+                            // All questions from the same day get the same testId
+                            data.testId = 'legacy_' + data.lastAttempted;
+                        }
+                        migrated = true;
+                    }
+                }
+
+                // Save if any migrations occurred
+                if (migrated) {
+                    localStorage.setItem('questionData', JSON.stringify(questionData));
+                    console.log('Question data migration completed');
+                }
+            } catch (error) {
+                console.error('Error during data migration:', error);
+            }
+        }
+
         // Initialize
         document.addEventListener('DOMContentLoaded', init);
 
         function init() {
             console.log('Initializing USMLE Env...');
+
+            // Migrate old data to ensure all questions have required fields
+            migrateQuestionData();
 
             // Check authentication first - only load content if authenticated
             const isAuthenticated = checkAuthentication();
@@ -3339,6 +3424,11 @@
             data.attempts = (data.attempts || 0) + 1;
             data.lastAttempted = new Date().toISOString().split('T')[0];
 
+            // Save testId if in test mode
+            if (isTestMode && testQuestions && testQuestions.length > 0) {
+                data.testId = getTestId([...testQuestions]);
+            }
+
             saveData(currentQuestionId, data);
 
             // Update button visual state
@@ -3429,6 +3519,16 @@
                 data.selectedAnswer = normalSelect.value;
             }
 
+            // Always ensure lastAttempted is set when user selects an answer
+            if (!data.lastAttempted) {
+                data.lastAttempted = new Date().toISOString().split('T')[0];
+            }
+
+            // Save testId if in test mode
+            if (isTestMode && testQuestions && testQuestions.length > 0) {
+                data.testId = getTestId([...testQuestions]);
+            }
+
             saveData(currentQuestionId, data);
 
             // Sync both dropdowns
@@ -3472,6 +3572,17 @@
                 // Save to our data structure
                 const data = getData(currentQuestionId);
                 data.selectedAnswer = currentChoice;
+
+                // Ensure lastAttempted is set
+                if (!data.lastAttempted) {
+                    data.lastAttempted = new Date().toISOString().split('T')[0];
+                }
+
+                // Save testId if in test mode
+                if (isTestMode && testQuestions && testQuestions.length > 0) {
+                    data.testId = getTestId([...testQuestions]);
+                }
+
                 saveData(currentQuestionId, data);
             }
         }
@@ -3500,6 +3611,19 @@
                 } else if (currentResult === 'incorrect') {
                     data.isCorrect = false;
                     data.isIncorrect = true;
+                }
+
+                // Ensure lastAttempted is set
+                if (!data.lastAttempted) {
+                    data.lastAttempted = new Date().toISOString().split('T')[0];
+                }
+
+                // Increment attempts
+                data.attempts = (data.attempts || 0) + 1;
+
+                // Save testId if in test mode
+                if (isTestMode && testQuestions && testQuestions.length > 0) {
+                    data.testId = getTestId([...testQuestions]);
                 }
 
                 saveData(currentQuestionId, data);
@@ -3990,7 +4114,9 @@
                 isIncorrect: false,
                 isFlagged: false,
                 attempts: 0,
-                selectedAnswer: ''
+                selectedAnswer: '',
+                lastAttempted: '',
+                testId: ''
             };
         }
 
