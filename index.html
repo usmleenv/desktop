@@ -3427,6 +3427,8 @@
             // Save testId if in test mode
             if (isTestMode && testQuestions && testQuestions.length > 0) {
                 data.testId = getTestId([...testQuestions]);
+                // Save testTime (total time for the test in milliseconds)
+                data.testTime = elapsedMs.toString();
             }
 
             saveData(currentQuestionId, data);
@@ -3527,6 +3529,8 @@
             // Save testId if in test mode
             if (isTestMode && testQuestions && testQuestions.length > 0) {
                 data.testId = getTestId([...testQuestions]);
+                // Save testTime (total time for the test in milliseconds)
+                data.testTime = elapsedMs.toString();
             }
 
             saveData(currentQuestionId, data);
@@ -3581,6 +3585,8 @@
                 // Save testId if in test mode
                 if (isTestMode && testQuestions && testQuestions.length > 0) {
                     data.testId = getTestId([...testQuestions]);
+                    // Save testTime (total time for the test in milliseconds)
+                    data.testTime = elapsedMs.toString();
                 }
 
                 saveData(currentQuestionId, data);
@@ -3624,6 +3630,8 @@
                 // Save testId if in test mode
                 if (isTestMode && testQuestions && testQuestions.length > 0) {
                     data.testId = getTestId([...testQuestions]);
+                    // Save testTime (total time for the test in milliseconds)
+                    data.testTime = elapsedMs.toString();
                 }
 
                 saveData(currentQuestionId, data);
@@ -4374,6 +4382,21 @@
                         if (data.isCorrect) dailyStats[date].correct++;
                         if (data.isIncorrect) dailyStats[date].incorrect++;
                         if (data.isFlagged) dailyStats[date].marked++;
+
+                        // Add time data from questionData if testTime exists
+                        if (data.testTime && data.testId) {
+                            const testTimeMs = parseInt(data.testTime);
+                            if (!isNaN(testTimeMs)) {
+                                // Calculate time per question based on testId format
+                                // testId format: "1564-1712-1762" (multiple questions) or "1564" (single question)
+                                const questionIds = data.testId.split('-');
+                                const questionsInTest = questionIds.length;
+                                const timePerQuestion = testTimeMs / questionsInTest;
+
+                                dailyStats[date].totalTime += timePerQuestion;
+                                dailyStats[date].questionCount++;
+                            }
+                        }
                     });
                 }
             }
@@ -4616,6 +4639,19 @@
                 if (data.isCorrect) dailyActivity[dateStr].correct++;
                 if (data.isIncorrect) dailyActivity[dateStr].incorrect++;
                 if (data.isFlagged) dailyActivity[dateStr].marked++;
+
+                // Add time data from questionData if testTime exists
+                if (data.testTime && data.testId) {
+                    const testTimeMs = parseInt(data.testTime);
+                    if (!isNaN(testTimeMs)) {
+                        // Calculate time per question based on testId format
+                        const questionIds = data.testId.split('-');
+                        const questionsInTest = questionIds.length;
+                        const timePerQuestion = testTimeMs / questionsInTest;
+
+                        dailyActivity[dateStr].totalTime += timePerQuestion;
+                    }
+                }
             }
 
             // Add time data from test history
@@ -4744,11 +4780,13 @@
         function downloadBackup() {
             const questionData = localStorage.getItem('questionData') || '{}';
             const notes = localStorage.getItem('questionNotes') || '{}';
+            const testHistory = localStorage.getItem('testHistory') || '[]';
 
-            // Combine data and notes into one backup object
+            // Combine data, notes, and testHistory into one backup object
             const backup = {
                 questionData: JSON.parse(questionData),
                 notes: JSON.parse(notes),
+                testHistory: JSON.parse(testHistory),
                 backupDate: new Date().toISOString()
             };
 
@@ -4773,12 +4811,14 @@
                     // Check if it's new format with notes (has backupDate field)
                     let questionData;
                     let notes = {};
+                    let testHistory = [];
                     let migrationInfo = null;
 
                     if (data.backupDate && data.questionData) {
-                        // New format with notes
+                        // New format with notes and testHistory
                         questionData = data.questionData;
                         notes = data.notes || {};
+                        testHistory = data.testHistory || [];
                     } else if (data.questionData && !data.backupDate) {
                         // Old format - needs migration
                         const result = migrateOldBackup(data.questionData);
@@ -4792,6 +4832,7 @@
                     // Load existing data from localStorage
                     const existingQuestionData = JSON.parse(localStorage.getItem('questionData') || '{}');
                     const existingNotes = JSON.parse(localStorage.getItem('questionNotes') || '{}');
+                    const existingTestHistory = JSON.parse(localStorage.getItem('testHistory') || '[]');
 
                     // Merge question data
                     Object.keys(questionData).forEach(qid => {
@@ -4810,7 +4851,10 @@
                                 attempts: Math.max(existing.attempts || 0, incoming.attempts || 0),
                                 lastAttempted: new Date(existing.lastAttempted || 0) > new Date(incoming.lastAttempted || 0)
                                     ? existing.lastAttempted
-                                    : incoming.lastAttempted
+                                    : incoming.lastAttempted,
+                                selectedAnswer: incoming.selectedAnswer || existing.selectedAnswer || '',
+                                testId: incoming.testId || existing.testId || '',
+                                testTime: incoming.testTime || existing.testTime || ''
                             };
                         }
                     });
@@ -4822,9 +4866,20 @@
                         }
                     });
 
+                    // Merge testHistory (avoid duplicates by test ID)
+                    const mergedTestHistory = [...existingTestHistory];
+                    const existingTestIds = new Set(existingTestHistory.map(t => t.id));
+
+                    testHistory.forEach(test => {
+                        if (!existingTestIds.has(test.id)) {
+                            mergedTestHistory.push(test);
+                        }
+                    });
+
                     // Save merged data
                     localStorage.setItem('questionData', JSON.stringify(existingQuestionData));
                     localStorage.setItem('questionNotes', JSON.stringify(existingNotes));
+                    localStorage.setItem('testHistory', JSON.stringify(mergedTestHistory));
 
                     // Show success message with migration info
                     if (migrationInfo) {
