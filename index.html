@@ -3752,9 +3752,16 @@
             const testSelect = document.getElementById('test-answer-select');
             const normalSelect = document.getElementById('normal-answer-select');
 
-            if (isTestMode && testSelect) {
+            // Check which actions bar is actually active/visible
+            const testActionsBar = document.getElementById('test-actions-bar');
+            const questionActionsBar = document.getElementById('question-actions-bar');
+            const isTestBarActive = testActionsBar && testActionsBar.classList.contains('active');
+            const isNormalBarActive = questionActionsBar && questionActionsBar.classList.contains('active');
+
+            // Use the dropdown from the active bar
+            if (isTestBarActive && testSelect) {
                 data.selectedAnswer = testSelect.value;
-            } else if (normalSelect) {
+            } else if (isNormalBarActive && normalSelect) {
                 data.selectedAnswer = normalSelect.value;
             }
 
