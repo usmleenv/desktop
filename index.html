@@ -753,6 +753,54 @@
             display: none;
         }
 
+        /* Fixed navigation buttons in footer (fullscreen mode) */
+        .fullscreen-nav-buttons {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 15px;
+            z-index: 10000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        body.fullscreen-mode .fullscreen-nav-buttons {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .fullscreen-nav-btn {
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50px;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .fullscreen-nav-btn:hover {
+            background: rgba(0, 0, 0, 0.9);
+            border-color: rgba(255, 255, 255, 0.5);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .fullscreen-nav-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
         /* Exit Fullscreen Button - same position as fullscreen button */
         .exit-fullscreen-btn {
             position: absolute;
@@ -1096,6 +1144,34 @@
         .question-action-btn:hover {
             transform: translateY(-1px);
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .question-action-btn.btn-nav {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: 700;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .question-action-btn.btn-nav:hover:not(:disabled) {
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.5);
+            transform: translateY(-2px) scale(1.05);
+        }
+
+        .question-action-btn.btn-nav:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none;
         }
 
         /* Stats Modal */
@@ -2382,6 +2458,8 @@
                 <button class="question-action-btn btn-flag" id="normal-flag-btn" onclick="toggleFlag()">🚩 Flag</button>
                 <button class="question-action-btn btn-correct" onclick="markQuestion('correct')">✓ Correct</button>
                 <button class="question-action-btn btn-incorrect" onclick="markQuestion('incorrect')">✗ Incorrect</button>
+                <button class="question-action-btn btn-nav" id="normal-prev-btn" onclick="navigateNormalQuestion(-1)" title="Previous Question">←</button>
+                <button class="question-action-btn btn-nav" id="normal-next-btn" onclick="navigateNormalQuestion(1)" title="Next Question">→</button>
                 <button class="question-action-btn btn-close" onclick="closeQuestion()">✕ Close</button>
             </div>
             <div class="content-header" id="content-header">
@@ -3070,11 +3148,27 @@
         }
 
         function handleKeyPress(e) {
+            // Don't trigger shortcuts if typing in input/textarea
+            if (e.target.matches('input, textarea')) return;
+
             // ESC key closes media modal
             if (e.key === 'Escape') {
                 const mediaModal = document.getElementById('media-modal');
                 if (mediaModal.classList.contains('show')) {
                     closeMediaModal();
+                    e.preventDefault();
+                    return;
+                }
+            }
+
+            // Space or P key toggles stopwatch pause/resume
+            if (e.key === ' ' || e.key.toLowerCase() === 'p') {
+                if (stopwatchState === 'running') {
+                    pauseStopwatch();
+                    e.preventDefault();
+                    return;
+                } else if (stopwatchState === 'paused') {
+                    startStopwatch();
                     e.preventDefault();
                     return;
                 }
@@ -3198,6 +3292,16 @@
             document.getElementById('page-title').textContent = topicName;
 
             renderQuestionsGrid();
+
+            // Automatically create a test history entry when navigating to a topic
+            const questionIds = topics[currentSystem][currentTopic];
+            if (questionIds && questionIds.length > 0) {
+                saveTestToHistory(questionIds);
+
+                // Auto-start stopwatch when navigating to a topic
+                stopStopwatch(); // Reset first
+                startStopwatch(); // Start timer
+            }
         }
 
         function renderQuestionsGrid() {
@@ -3266,9 +3370,26 @@
             currentQuestionId = questionId;
             const data = getData(questionId);
 
+            // Set up current topic questions for navigation (treat as test mode)
+            const questionIds = topics[currentSystem][currentTopic];
+            currentTopicIndex = questionIds.indexOf(questionId);
+
+            // Activate test mode when opening question from System/Category
+            testQuestions = questionIds;
+            currentTestIndex = currentTopicIndex;
+            isTestMode = true;
+
+            // Update UI - activate test mode in header
+            document.getElementById('start-test-btn').style.display = 'none';
+            document.getElementById('finish-test-btn').style.display = 'inline-block';
+            document.getElementById('test-nav-arrows').classList.add('active');
+            document.getElementById('question-search').disabled = true;
+
             // Switch to viewing mode
             const container = document.getElementById('container');
             container.classList.add('viewing-question');
+            container.classList.add('test-mode');
+            document.body.classList.add('test-mode-active');
 
             // Show question actions bar
             document.getElementById('question-actions-bar').classList.add('active');
@@ -3291,8 +3412,16 @@
             currentNoteQuestionId = questionId;
             document.getElementById('notes-btn').style.display = 'inline-flex';
 
-            // Render topic questions in sidebar
-            renderTopicSidebar();
+            // Auto-start stopwatch (if not already running)
+            if (stopwatchState !== 'running') {
+                const autoPauseCheckbox = document.getElementById('autoPauseOnSubmit');
+                autoPauseCheckbox.checked = true;
+                localStorage.setItem('autoPauseOnSubmit', 'true');
+                startStopwatch(); // Start timer
+            }
+
+            // Render topic questions in sidebar (test sidebar)
+            renderTestSidebar();
 
             // Show question in main content area
             const contentBody = document.getElementById('content-body');
@@ -3301,6 +3430,14 @@
                     <button class="fullscreen-btn" id="fs-enter-btn" title="Fullscreen (F)">⛶</button>
                     <button class="exit-fullscreen-btn" id="fs-exit-btn" title="Exit Fullscreen (Esc)">✕</button>
                     <iframe id="question-iframe" src="questions/${questionId}.html" style="width: 100%; height: 100%; border: none;"></iframe>
+                    <div class="fullscreen-nav-buttons">
+                        <button class="fullscreen-nav-btn" id="fs-prev-btn" title="Previous Question">
+                            ← Anterior
+                        </button>
+                        <button class="fullscreen-nav-btn" id="fs-next-btn" title="Next Question">
+                            Próxima →
+                        </button>
+                    </div>
                 </div>
             `;
 
@@ -3310,8 +3447,37 @@
             if (fsEnterBtn) fsEnterBtn.addEventListener('click', enterFullscreen);
             if (fsExitBtn) fsExitBtn.addEventListener('click', exitFullscreen);
 
+            // Add event listeners to navigation buttons
+            const fsPrevBtn = document.getElementById('fs-prev-btn');
+            const fsNextBtn = document.getElementById('fs-next-btn');
+            const topicQuestionIds = topics[currentSystem][currentTopic];
+
+            if (fsPrevBtn) {
+                fsPrevBtn.addEventListener('click', () => {
+                    if (currentTopicIndex > 0) {
+                        currentTopicIndex--;
+                        const nextQuestionId = topicQuestionIds[currentTopicIndex];
+                        openQuestion(nextQuestionId);
+                    }
+                });
+                fsPrevBtn.disabled = currentTopicIndex === 0;
+            }
+            if (fsNextBtn) {
+                fsNextBtn.addEventListener('click', () => {
+                    if (currentTopicIndex < topicQuestionIds.length - 1) {
+                        currentTopicIndex++;
+                        const nextQuestionId = topicQuestionIds[currentTopicIndex];
+                        openQuestion(nextQuestionId);
+                    }
+                });
+                fsNextBtn.disabled = currentTopicIndex >= topicQuestionIds.length - 1;
+            }
+
             // Update button states based on current question data
             updateActionButtonsState();
+
+            // Update navigation button states
+            updateNavigationButtonStates();
 
             // Setup iframe message handler for media clicks
             setupIframeMediaHandler();
@@ -3329,10 +3495,51 @@
             }
         }
 
+        // Navigate between questions in normal mode (using arrows in action bar)
+        function navigateNormalQuestion(direction) {
+            if (!currentSystem || !currentTopic) return;
+
+            const questionIds = topics[currentSystem][currentTopic];
+            const newIndex = currentTopicIndex + direction;
+
+            // Check bounds
+            if (newIndex < 0 || newIndex >= questionIds.length) return;
+
+            // Navigate to new question
+            currentTopicIndex = newIndex;
+            const nextQuestionId = questionIds[newIndex];
+            openQuestion(nextQuestionId);
+
+            // Update button states
+            updateNavigationButtonStates();
+        }
+
+        // Update navigation button states based on current position
+        function updateNavigationButtonStates() {
+            if (!currentSystem || !currentTopic) return;
+
+            const questionIds = topics[currentSystem][currentTopic];
+            const normalPrevBtn = document.getElementById('normal-prev-btn');
+            const normalNextBtn = document.getElementById('normal-next-btn');
+
+            if (normalPrevBtn) {
+                normalPrevBtn.disabled = currentTopicIndex === 0;
+            }
+            if (normalNextBtn) {
+                normalNextBtn.disabled = currentTopicIndex >= questionIds.length - 1;
+            }
+        }
+
         function closeQuestion() {
             // Exit fullscreen if active
             if (document.body.classList.contains('fullscreen-mode')) {
                 exitFullscreen();
+            }
+
+            // If in test mode, finish the test
+            if (isTestMode) {
+                finishTest();
+                return; // finishTest handles everything
             }
 
             // Exit viewing mode
@@ -4075,6 +4282,14 @@
                     <button class="fullscreen-btn" id="fs-enter-btn" title="Fullscreen (F)">⛶</button>
                     <button class="exit-fullscreen-btn" id="fs-exit-btn" title="Exit Fullscreen (Esc)">✕</button>
                     <iframe id="question-iframe" src="questions/${questionId}.html" style="width: 100%; height: 100%; border: none;"></iframe>
+                    <div class="fullscreen-nav-buttons">
+                        <button class="fullscreen-nav-btn" id="fs-prev-btn" title="Previous Question">
+                            ← Anterior
+                        </button>
+                        <button class="fullscreen-nav-btn" id="fs-next-btn" title="Next Question">
+                            Próxima →
+                        </button>
+                    </div>
                 </div>
             `;
 
@@ -4083,6 +4298,26 @@
             const fsExitBtn = document.getElementById('fs-exit-btn');
             if (fsEnterBtn) fsEnterBtn.addEventListener('click', enterFullscreen);
             if (fsExitBtn) fsExitBtn.addEventListener('click', exitFullscreen);
+
+            // Add event listeners to navigation buttons (Test mode)
+            const fsPrevBtn = document.getElementById('fs-prev-btn');
+            const fsNextBtn = document.getElementById('fs-next-btn');
+            if (fsPrevBtn) {
+                fsPrevBtn.addEventListener('click', () => {
+                    if (currentTestIndex > 0) {
+                        navigateQuestion(-1);
+                    }
+                });
+                fsPrevBtn.disabled = currentTestIndex === 0;
+            }
+            if (fsNextBtn) {
+                fsNextBtn.addEventListener('click', () => {
+                    if (currentTestIndex < testQuestions.length - 1) {
+                        navigateQuestion(1);
+                    }
+                });
+                fsNextBtn.disabled = currentTestIndex >= testQuestions.length - 1;
+            }
 
             // Update button states based on current question data
             updateActionButtonsState();
@@ -5148,6 +5383,7 @@
                 let correctIds = [];
                 let incorrectIds = [];
                 let markedIds = [];
+                let omittedIds = [];
                 let allIds = test.questionIds;
 
                 test.questionIds.forEach(qId => {
@@ -5156,6 +5392,11 @@
                         if (data.isCorrect) correctIds.push(qId);
                         if (data.isIncorrect) incorrectIds.push(qId);
                         if (data.isFlagged) markedIds.push(qId);
+                        // Omitted = not marked as correct or incorrect
+                        if (!data.isCorrect && !data.isIncorrect) omittedIds.push(qId);
+                    } else {
+                        // If no data exists, it's also omitted
+                        omittedIds.push(qId);
                     }
                 });
 
@@ -5205,6 +5446,7 @@
                                     <option value="all">All (${allIds.length})</option>
                                     <option value="correct">Correct (${correctIds.length})</option>
                                     <option value="incorrect">Incorrect (${incorrectIds.length})</option>
+                                    <option value="omitted">Omitted (${omittedIds.length})</option>
                                     <option value="marked">Marked (${markedIds.length})</option>
                                 </select>
                             </div>
@@ -5222,6 +5464,7 @@
                     all: allIds,
                     correct: correctIds,
                     incorrect: incorrectIds,
+                    omitted: omittedIds,
                     marked: markedIds
                 };
             });
