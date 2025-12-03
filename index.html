@@ -649,6 +649,34 @@
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
         }
 
+        .test-action-btn.btn-nav {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: 700;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .test-action-btn.btn-nav:hover:not(:disabled) {
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.5);
+            transform: translateY(-2px) scale(1.05);
+        }
+
+        .test-action-btn.btn-nav:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none;
+        }
+
         .content-header {
             background: var(--surface);
             padding: 16px 24px;
@@ -2420,6 +2448,8 @@
                 <button class="test-action-btn btn-flag" id="test-flag-btn" onclick="toggleFlag()">🚩 Flag</button>
                 <button class="test-action-btn btn-correct" onclick="markQuestion('correct')">✓ Correct</button>
                 <button class="test-action-btn btn-incorrect" onclick="markQuestion('incorrect')">✗ Incorrect</button>
+                <button class="test-action-btn btn-nav" id="test-prev-btn" onclick="navigateQuestion(-1)" title="Previous Question">←</button>
+                <button class="test-action-btn btn-nav" id="test-next-btn" onclick="navigateQuestion(1)" title="Next Question">→</button>
             </div>
             <!-- Normal Mode Actions Bar -->
             <div class="question-actions-bar" id="question-actions-bar">
@@ -4246,9 +4276,14 @@
                 }
             });
 
-            // Update navigation buttons
+            // Update navigation buttons (both header and test actions bar)
             document.getElementById('prev-btn').disabled = index === 0;
             document.getElementById('next-btn').disabled = index === testQuestions.length - 1;
+
+            const testPrevBtn = document.getElementById('test-prev-btn');
+            const testNextBtn = document.getElementById('test-next-btn');
+            if (testPrevBtn) testPrevBtn.disabled = index === 0;
+            if (testNextBtn) testNextBtn.disabled = index === testQuestions.length - 1;
 
             // Open question in fullscreen
             currentQuestionId = questionId;
